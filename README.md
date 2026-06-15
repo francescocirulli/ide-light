@@ -54,8 +54,10 @@ The installer also creates a `code-light` command in `/usr/local/bin` when writa
 ```sh
 code-light .
 code-light Sources/CodeLightIDE/CodeViewerController.swift:42
-open 'code-light://open?file=/absolute/path/to/File.swift&line=42'
+open 'code-light://open?file=/absolute/path/to/File.swift&root=/absolute/path/to/repo&line=42'
 ```
+
+For file paths, the CLI sends the nearest Git repository root as workspace context when one exists.
 
 ## Design Goals
 

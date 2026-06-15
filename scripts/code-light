@@ -65,6 +65,79 @@ normalize_argument() {
   absolute_path "$value"
 }
 
+urlencode() {
+  local value="$1"
+  local length=${#value}
+  local index
+  local char
+  local encoded=""
+
+  for ((index = 0; index < length; index++)); do
+    char="${value:index:1}"
+    case "$char" in
+      [a-zA-Z0-9.~_-])
+        encoded+="$char"
+        ;;
+      *)
+        printf -v char '%%%02X' "'$char"
+        encoded+="$char"
+        ;;
+    esac
+  done
+
+  printf '%s\n' "$encoded"
+}
+
+workspace_for_path() {
+  local path="$1"
+  local dir
+
+  if [ -d "$path" ]; then
+    printf '%s\n' "$path"
+    return
+  fi
+
+  dir="$(dirname "$path")"
+  if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then
+    git -C "$dir" rev-parse --show-toplevel
+  else
+    (cd "$dir" && pwd -P)
+  fi
+}
+
+open_request() {
+  local value="$1"
+  local path
+  local line=""
+  local workspace
+  local url
+
+  if [[ "$value" == "code-light://"* ]]; then
+    open "$value"
+    return
+  fi
+
+  if [[ "$value" =~ ^(.+):([0-9]+)$ ]]; then
+    path="$(absolute_path "${BASH_REMATCH[1]}")"
+    line="${BASH_REMATCH[2]}"
+  else
+    path="$(absolute_path "$value")"
+  fi
+
+  url="code-light://open?file=$(urlencode "$path")"
+
+  if [ -f "$path" ]; then
+    workspace="$(workspace_for_path "$path")"
+    url="$url&root=$(urlencode "$workspace")"
+  fi
+
+  if [ -n "$line" ]; then
+    url="$url&line=$line"
+  fi
+
+  open "$url"
+}
+
 case "${1:-}" in
   -h|--help)
     usage
@@ -82,9 +155,6 @@ if [ "$#" -eq 0 ]; then
   exit 0
 fi
 
-ARGS=()
 for arg in "$@"; do
-  ARGS+=("$(normalize_argument "$arg")")
+  open_request "$(normalize_argument "$arg")"
 done
-
-open -n "$APP_BUNDLE" --args "${ARGS[@]}"

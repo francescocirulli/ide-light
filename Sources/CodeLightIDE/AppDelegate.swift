@@ -248,8 +248,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if isDirectory.boolValue {
             mainWindowController?.openWorkspace(firstRequest.url)
         } else {
+            let workspaceURL = firstRequest.workspaceURL ?? firstRequest.url.deletingLastPathComponent()
             mainWindowController?.openWorkspace(
-                firstRequest.url.deletingLastPathComponent(),
+                workspaceURL,
                 selectedFile: firstRequest.url,
                 selectedLine: firstRequest.line
             )

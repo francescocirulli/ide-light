@@ -3,10 +3,12 @@ import Foundation
 struct OpenRequest {
     let url: URL
     let line: Int?
+    let workspaceURL: URL?
 
-    init(url: URL, line: Int? = nil) {
+    init(url: URL, line: Int? = nil, workspaceURL: URL? = nil) {
         self.url = url
         self.line = line
+        self.workspaceURL = workspaceURL
     }
 
     static func parse(argument: String) -> OpenRequest? {
@@ -39,6 +41,7 @@ struct OpenRequest {
         let items = components?.queryItems ?? []
         let fileValue = items.first { $0.name == "file" || $0.name == "path" }?.value
         let lineValue = items.first { $0.name == "line" }?.value
+        let rootValue = items.first { $0.name == "root" || $0.name == "workspace" }?.value
 
         let path: String?
         if let fileValue, !fileValue.isEmpty {
@@ -51,6 +54,19 @@ struct OpenRequest {
 
         guard let path, FileManager.default.fileExists(atPath: path) else { return nil }
         let line = lineValue.flatMap(Int.init).flatMap { $0 > 0 ? $0 : nil }
-        return OpenRequest(url: URL(fileURLWithPath: path), line: line)
+
+        let workspaceURL = rootValue.flatMap { value -> URL? in
+            let expanded = NSString(string: value).expandingTildeInPath
+            var isDirectory: ObjCBool = false
+            guard
+                FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory),
+                isDirectory.boolValue
+            else {
+                return nil
+            }
+            return URL(fileURLWithPath: expanded)
+        }
+
+        return OpenRequest(url: URL(fileURLWithPath: path), line: line, workspaceURL: workspaceURL)
     }
 }

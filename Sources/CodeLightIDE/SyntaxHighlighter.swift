@@ -45,6 +45,30 @@ enum Language: String {
         }
     }
 
+    var fenceIdentifier: String {
+        switch self {
+        case .swift: "swift"
+        case .javascript: "javascript"
+        case .typescript: "typescript"
+        case .python: "python"
+        case .rust: "rust"
+        case .go: "go"
+        case .java: "java"
+        case .kotlin: "kotlin"
+        case .cLike: "c"
+        case .ruby: "ruby"
+        case .php: "php"
+        case .html: "html"
+        case .css: "css"
+        case .json: "json"
+        case .markdown: "markdown"
+        case .shell: "bash"
+        case .yaml: "yaml"
+        case .sql: "sql"
+        case .plain: ""
+        }
+    }
+
     static func detect(from url: URL) -> Language {
         switch url.pathExtension.lowercased() {
         case "swift": .swift

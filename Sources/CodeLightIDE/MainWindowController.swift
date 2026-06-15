@@ -68,12 +68,12 @@ final class MainWindowController: NSWindowController {
         }
     }
 
-    func openWorkspace(_ url: URL, selectedFile: URL? = nil) {
+    func openWorkspace(_ url: URL, selectedFile: URL? = nil, selectedLine: Int? = nil) {
         fileTreeController.setRoot(url)
         window?.subtitle = url.path
 
         if let selectedFile {
-            codeViewerController.open(selectedFile)
+            codeViewerController.open(selectedFile, line: selectedLine)
         } else {
             codeViewerController.showWorkspaceReady(url)
         }
@@ -116,6 +116,18 @@ final class MainWindowController: NSWindowController {
 
     func setShowsHiddenAndIgnored(_ value: Bool) {
         fileTreeController.setShowsHiddenAndIgnored(value)
+    }
+
+    func copyFileReference() {
+        codeViewerController.copyFileReference()
+    }
+
+    func copySelectionAsAgentContext() {
+        codeViewerController.copySelectionAsAgentContext()
+    }
+
+    func copyWorkspaceContext() {
+        codeViewerController.copyWorkspaceContext()
     }
 
     @objc private func openFolderFromToolbar(_ sender: Any?) {

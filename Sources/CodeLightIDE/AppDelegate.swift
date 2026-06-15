@@ -1,22 +1,29 @@
 import AppKit
+import Carbon
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
-    private var pendingOpenURLs: [URL] = []
+    private var pendingOpenRequests: [OpenRequest] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
         configureMenus()
 
         let controller = MainWindowController()
         mainWindowController = controller
         controller.showWindow(nil)
 
-        if pendingOpenURLs.isEmpty {
+        if pendingOpenRequests.isEmpty {
             openLaunchArgumentIfPresent()
         } else {
-            openURLs(pendingOpenURLs)
-            pendingOpenURLs.removeAll()
+            openRequests(pendingOpenRequests)
+            pendingOpenRequests.removeAll()
         }
 
         NSApp.activate(ignoringOtherApps: true)
@@ -27,17 +34,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
-        openURLs([URL(fileURLWithPath: filename)])
+        openRequests([OpenRequest(url: URL(fileURLWithPath: filename))])
         return true
     }
 
     func application(_ sender: NSApplication, openFiles filenames: [String]) {
-        openURLs(filenames.map(URL.init(fileURLWithPath:)))
+        openRequests(filenames.map { OpenRequest(url: URL(fileURLWithPath: $0)) })
         sender.reply(toOpenOrPrint: .success)
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        openURLs(urls)
+        let requests = urls.compactMap { url -> OpenRequest? in
+            if url.scheme == "code-light" {
+                return OpenRequest.parseCustomURL(url)
+            }
+            return OpenRequest(url: url)
+        }
+        openRequests(requests)
     }
 
     @objc private func openFolder(_ sender: Any?) {
@@ -58,6 +71,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func collapseAll(_ sender: Any?) {
         mainWindowController?.collapseSidebar()
+    }
+
+    @objc private func copyFileReference(_ sender: Any?) {
+        mainWindowController?.copyFileReference()
+    }
+
+    @objc private func copySelectionAsAgentContext(_ sender: Any?) {
+        mainWindowController?.copySelectionAsAgentContext()
+    }
+
+    @objc private func copyWorkspaceContext(_ sender: Any?) {
+        mainWindowController?.copyWorkspaceContext()
+    }
+
+    @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        guard
+            let value = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+            let url = URL(string: value),
+            let request = OpenRequest.parseCustomURL(url)
+        else {
+            return
+        }
+        openRequests([request])
     }
 
     @objc private func toggleHiddenFiles(_ sender: NSMenuItem) {
@@ -140,6 +176,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         find.target = self
         editMenu.addItem(find)
 
+        editMenu.addItem(.separator())
+
+        let copyFileReference = NSMenuItem(
+            title: "Copy File Reference",
+            action: #selector(copyFileReference(_:)),
+            keyEquivalent: "c"
+        )
+        copyFileReference.keyEquivalentModifierMask = [.command, .option]
+        copyFileReference.target = self
+        editMenu.addItem(copyFileReference)
+
+        let copySelectionContext = NSMenuItem(
+            title: "Copy Selection as Agent Context",
+            action: #selector(copySelectionAsAgentContext(_:)),
+            keyEquivalent: "c"
+        )
+        copySelectionContext.keyEquivalentModifierMask = [.command, .shift]
+        copySelectionContext.target = self
+        editMenu.addItem(copySelectionContext)
+
+        let copyWorkspaceContext = NSMenuItem(
+            title: "Copy Workspace Context",
+            action: #selector(copyWorkspaceContext(_:)),
+            keyEquivalent: "c"
+        )
+        copyWorkspaceContext.keyEquivalentModifierMask = [.command, .shift, .option]
+        copyWorkspaceContext.target = self
+        editMenu.addItem(copyWorkspaceContext)
+
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
 
@@ -164,36 +229,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openLaunchArgumentIfPresent() {
-        guard let argument = CommandLine.arguments.dropFirst().first else { return }
-
-        var isDirectory: ObjCBool = false
-        let expandedPath = NSString(string: argument).expandingTildeInPath
-        guard FileManager.default.fileExists(atPath: expandedPath, isDirectory: &isDirectory) else { return }
-
-        let url = URL(fileURLWithPath: expandedPath)
-        if isDirectory.boolValue {
-            mainWindowController?.openWorkspace(url)
-        } else {
-            mainWindowController?.openWorkspace(url.deletingLastPathComponent(), selectedFile: url)
-        }
+        let requests = CommandLine.arguments.dropFirst().compactMap(OpenRequest.parse)
+        openRequests(requests)
     }
 
-    private func openURLs(_ urls: [URL]) {
-        guard let firstURL = urls.first else { return }
+    private func openRequests(_ requests: [OpenRequest]) {
+        guard let firstRequest = requests.first else { return }
 
         guard mainWindowController != nil else {
-            pendingOpenURLs.append(contentsOf: urls)
+            pendingOpenRequests.append(contentsOf: requests)
             return
         }
 
         var isDirectory: ObjCBool = false
-        let path = firstURL.path
+        let path = firstRequest.url.path
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else { return }
 
         if isDirectory.boolValue {
-            mainWindowController?.openWorkspace(firstURL)
+            mainWindowController?.openWorkspace(firstRequest.url)
         } else {
-            mainWindowController?.openWorkspace(firstURL.deletingLastPathComponent(), selectedFile: firstURL)
+            mainWindowController?.openWorkspace(
+                firstRequest.url.deletingLastPathComponent(),
+                selectedFile: firstRequest.url,
+                selectedLine: firstRequest.line
+            )
         }
     }
 }

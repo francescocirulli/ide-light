@@ -20,6 +20,7 @@ final class CodeViewerController: NSViewController {
     private let loadQueue = DispatchQueue(label: "CodeLight.FileLoad", qos: .userInitiated)
     private var currentLoadID = UUID()
     private var currentURL: URL?
+    private var currentLanguage: Language = .plain
     private var currentText = ""
     private var searchMatches: [NSRange] = []
     private var selectedSearchMatch = -1
@@ -248,12 +249,13 @@ final class CodeViewerController: NSViewController {
         clearFindState()
     }
 
-    func open(_ url: URL) {
+    func open(_ url: URL, line: Int? = nil) {
         currentURL = url
         workspaceURL = workspaceURL ?? url.deletingLastPathComponent()
         currentLoadID = UUID()
         let loadID = currentLoadID
         let language = Language.detect(from: url)
+        currentLanguage = language
         let highlighter = SyntaxHighlighter()
 
         titleLabel.stringValue = url.lastPathComponent
@@ -284,7 +286,11 @@ final class CodeViewerController: NSViewController {
                     guard self.currentLoadID == loadID else { return }
                     self.currentText = loaded.text
                     self.textView.textStorage?.setAttributedString(attributed)
-                    self.textView.scrollToBeginningOfDocument(nil)
+                    if let line {
+                        self.selectAndScrollToLine(line)
+                    } else {
+                        self.textView.scrollToBeginningOfDocument(nil)
+                    }
                     self.metadataLabel.stringValue = self.detailText(
                         language: language,
                         bytes: loaded.byteCount,
@@ -308,6 +314,70 @@ final class CodeViewerController: NSViewController {
     func focusFind() {
         view.window?.makeFirstResponder(searchField)
         searchField.selectText(nil)
+    }
+
+    func copyFileReference() {
+        guard let reference = currentFileReference() else { return }
+        copyToPasteboard(reference)
+    }
+
+    func copySelectionAsAgentContext() {
+        guard let currentURL else { return }
+
+        let range = normalizedSelectedRange()
+        let lineRange = lineRangeDescription(for: range)
+        let relativePath = displayPath(for: currentURL)
+        let selectedText = range.length > 0
+            ? (currentText as NSString).substring(with: range)
+            : ""
+
+        let context: String
+        if selectedText.isEmpty {
+            context = """
+            File: \(relativePath)
+            Lines: \(lineRange)
+
+            No code selected.
+            """
+        } else {
+            context = """
+            File: \(relativePath)
+            Lines: \(lineRange)
+
+            ```\(currentLanguage.fenceIdentifier)
+            \(selectedText)
+            ```
+            """
+        }
+
+        copyToPasteboard(context)
+    }
+
+    func copyWorkspaceContext() {
+        guard let workspaceURL else { return }
+
+        var lines: [String] = [
+            "Workspace: \(workspaceURL.path)"
+        ]
+
+        if let reference = currentFileReference() {
+            lines.append("Current file: \(reference)")
+        }
+
+        if !recentFiles.isEmpty {
+            lines.append("")
+            lines.append("Recent files:")
+            lines.append(contentsOf: recentFiles.map { "- \(displayPath(for: $0))" })
+        }
+
+        let files = FileIndex.files(under: workspaceURL, showsHiddenAndIgnored: false)
+        if !files.isEmpty {
+            lines.append("")
+            lines.append("Workspace files (first \(min(files.count, 120)) of \(files.count)):")
+            lines.append(contentsOf: files.prefix(120).map { "- \($0.relativePath)" })
+        }
+
+        copyToPasteboard(lines.joined(separator: "\n"))
     }
 
     @objc private func searchTextChanged(_ sender: NSSearchField) {
@@ -441,6 +511,12 @@ final class CodeViewerController: NSViewController {
         scrollView.verticalRulerView?.needsDisplay = true
     }
 
+    private func selectAndScrollToLine(_ line: Int) {
+        let range = characterRange(forLine: line)
+        textView.setSelectedRange(range)
+        textView.scrollRangeToVisible(range)
+    }
+
     private func detailText(language: Language, bytes: Int, lineCount: Int, highlighted: Bool) -> String {
         let byteText = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
         let highlightText = highlighted ? "highlighted" : "plain for speed"
@@ -516,6 +592,74 @@ final class CodeViewerController: NSViewController {
 
     private func compactPath(_ url: URL) -> String {
         url.deletingLastPathComponent().path
+    }
+
+    private func currentFileReference() -> String? {
+        guard let currentURL else { return nil }
+        let range = normalizedSelectedRange()
+        let lineRange = lineRangeDescription(for: range)
+        return "\(displayPath(for: currentURL)):\(lineRange)"
+    }
+
+    private func displayPath(for url: URL) -> String {
+        guard let workspaceURL else { return url.path }
+        return FileIndex.relativePath(for: url, root: workspaceURL)
+    }
+
+    private func normalizedSelectedRange() -> NSRange {
+        let selected = textView.selectedRange()
+        let textLength = (currentText as NSString).length
+        guard selected.location != NSNotFound, selected.location <= textLength else {
+            return NSRange(location: 0, length: 0)
+        }
+        return NSRange(location: selected.location, length: min(selected.length, textLength - selected.location))
+    }
+
+    private func lineRangeDescription(for range: NSRange) -> String {
+        let startLine = lineNumber(at: range.location)
+        guard range.length > 0 else { return "\(startLine)" }
+
+        let endLocation = max(range.location, range.location + range.length - 1)
+        let endLine = lineNumber(at: endLocation)
+        return startLine == endLine ? "\(startLine)" : "\(startLine)-\(endLine)"
+    }
+
+    private func lineNumber(at location: Int) -> Int {
+        let text = currentText as NSString
+        let clamped = min(max(location, 0), text.length)
+        guard clamped > 0 else { return 1 }
+        return text.substring(to: clamped).reduce(1) { count, character in
+            character == "\n" ? count + 1 : count
+        }
+    }
+
+    private func characterRange(forLine requestedLine: Int) -> NSRange {
+        let text = currentText as NSString
+        guard text.length > 0 else { return NSRange(location: 0, length: 0) }
+
+        let targetLine = max(requestedLine, 1)
+        var currentLine = 1
+        var lineStart = 0
+
+        while lineStart < text.length, currentLine < targetLine {
+            let searchRange = NSRange(location: lineStart, length: text.length - lineStart)
+            let newlineRange = text.range(of: "\n", options: [], range: searchRange)
+            guard newlineRange.location != NSNotFound else {
+                return NSRange(location: text.length, length: 0)
+            }
+            lineStart = newlineRange.location + 1
+            currentLine += 1
+        }
+
+        let remainder = NSRange(location: lineStart, length: text.length - lineStart)
+        let newlineRange = text.range(of: "\n", options: [], range: remainder)
+        let lineEnd = newlineRange.location == NSNotFound ? text.length : newlineRange.location
+        return NSRange(location: lineStart, length: max(lineEnd - lineStart, 0))
+    }
+
+    private func copyToPasteboard(_ string: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
     }
 
     private func configureIconButton(_ button: NSButton, symbol: String, toolTip: String, action: Selector) {

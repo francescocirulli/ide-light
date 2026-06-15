@@ -7,6 +7,7 @@ The goal is speed and calm. Code Light avoids editing workflows, project indexin
 ## Features
 
 - Native AppKit UI with a compact reader-focused layout.
+- Custom macOS app icon.
 - Lazy folder tree for fast large-repo browsing.
 - Read-only code viewer with line numbers.
 - Lightweight syntax highlighting for common languages.
@@ -15,6 +16,7 @@ The goal is speed and calm. Code Light avoids editing workflows, project indexin
 - Recently opened file chips with close controls.
 - Sidebar file filtering.
 - File metadata header with language, line count, size, path, and copy-path action.
+- Agent-friendly file references, selected-code context copy, CLI entry point, and URL scheme.
 
 ## Run
 
@@ -47,6 +49,14 @@ To install the app and register it with Finder's Open With list:
 scripts/install-app.sh
 ```
 
+The installer also creates a `code-light` command in `/usr/local/bin` when writable, otherwise in `~/.local/bin`.
+
+```sh
+code-light .
+code-light Sources/CodeLightIDE/CodeViewerController.swift:42
+open 'code-light://open?file=/absolute/path/to/File.swift&line=42'
+```
+
 ## Design Goals
 
 - Native AppKit UI for low startup overhead.
@@ -66,6 +76,9 @@ scripts/install-app.sh
 - `Enter` / `Shift-Enter` in Find: next or previous match.
 - `Esc` in Find: clear search and return to the code view.
 - `Command-.`: show or hide hidden/vendor folders.
+- `Command-Option-C`: copy the current file reference as `path:line`.
+- `Command-Shift-C`: copy the current selection as Markdown agent context.
+- `Command-Shift-Option-C`: copy a compact workspace context summary.
 
 ## Reader Features
 
@@ -73,6 +86,16 @@ scripts/install-app.sh
 - The header shows file path, language, line count, size, and a copy-path button.
 - Recently opened files appear as closeable compact chips above the code.
 - Sidebar filtering keeps folder context while narrowing visible files.
+
+## Agent Workflows
+
+Code Light is designed to sit beside coding agents and heavy editors:
+
+- Agents can open a specific file or line with `code-light path/to/file.swift:42`.
+- Agents can use the `code-light://open?file=...&line=...` URL scheme from scripts or local tools.
+- Humans can copy exact `path:line` references from the app for prompts, issues, or reviews.
+- Humans can copy selected code as fenced Markdown with source metadata, ready to paste into an agent.
+- Workspace context copy gives an agent the project root and a compact file list without indexing or background services.
 
 ## Repository
 

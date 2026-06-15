@@ -8,6 +8,7 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 
 cd "$ROOT_DIR"
+swift "$ROOT_DIR/scripts/generate-app-icon.swift"
 swift build -c release
 
 rm -rf "$APP_DIR"
@@ -15,6 +16,7 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp "$ROOT_DIR/.build/release/CodeLightIDE" "$MACOS_DIR/CodeLightIDE"
 cp "$ROOT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
+cp "$ROOT_DIR/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 
 chmod +x "$MACOS_DIR/CodeLightIDE"
 

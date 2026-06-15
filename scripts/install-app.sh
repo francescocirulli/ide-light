@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Code Light.app"
 SOURCE_APP="$ROOT_DIR/dist/$APP_NAME"
+CLI_SOURCE="$ROOT_DIR/scripts/code-light"
 
 if [ -w /Applications ]; then
   INSTALL_DIR="/Applications"
@@ -24,4 +25,15 @@ fi
 
 touch "$INSTALL_DIR/$APP_NAME"
 
+if [ -d /usr/local/bin ] && [ -w /usr/local/bin ]; then
+  CLI_DIR="/usr/local/bin"
+else
+  CLI_DIR="$HOME/.local/bin"
+  mkdir -p "$CLI_DIR"
+fi
+
+cp "$CLI_SOURCE" "$CLI_DIR/code-light"
+chmod +x "$CLI_DIR/code-light"
+
 echo "Installed: $INSTALL_DIR/$APP_NAME"
+echo "Command:   $CLI_DIR/code-light"

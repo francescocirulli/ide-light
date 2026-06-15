@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_BUNDLE="/Applications/Code Light.app"
+if [ ! -d "$APP_BUNDLE" ]; then
+  APP_BUNDLE="$HOME/Applications/Code Light.app"
+fi
+
+usage() {
+  cat <<'USAGE'
+Code Light source reader
+
+Usage:
+  code-light [path]
+  code-light [path:line]
+  code-light [code-light://open?file=/abs/path/File.swift&line=42]
+
+Examples:
+  code-light .
+  code-light Sources/CodeLightIDE/CodeViewerController.swift:42
+USAGE
+}
+
+absolute_path() {
+  local value="$1"
+
+  if [[ "$value" == "~" || "$value" == "~/"* ]]; then
+    value="$HOME${value:1}"
+  fi
+
+  if [[ "$value" != /* ]]; then
+    value="$PWD/$value"
+  fi
+
+  if [ -d "$value" ]; then
+    (cd "$value" && pwd -P)
+    return
+  fi
+
+  local dir
+  local base
+  dir="$(dirname "$value")"
+  base="$(basename "$value")"
+
+  if [ -d "$dir" ]; then
+    printf '%s/%s\n' "$(cd "$dir" && pwd -P)" "$base"
+  else
+    printf '%s\n' "$value"
+  fi
+}
+
+normalize_argument() {
+  local value="$1"
+
+  if [[ "$value" == "code-light://"* ]]; then
+    printf '%s\n' "$value"
+    return
+  fi
+
+  if [[ "$value" =~ ^(.+):([0-9]+)$ ]]; then
+    printf '%s:%s\n' "$(absolute_path "${BASH_REMATCH[1]}")" "${BASH_REMATCH[2]}"
+    return
+  fi
+
+  absolute_path "$value"
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
+if [ ! -d "$APP_BUNDLE" ]; then
+  echo "Code Light is not installed. Run scripts/install-app.sh from the repository first." >&2
+  exit 1
+fi
+
+if [ "$#" -eq 0 ]; then
+  open "$APP_BUNDLE"
+  exit 0
+fi
+
+ARGS=()
+for arg in "$@"; do
+  ARGS+=("$(normalize_argument "$arg")")
+done
+
+open -n "$APP_BUNDLE" --args "${ARGS[@]}"

@@ -41,6 +41,12 @@ scripts/build-app.sh
 open "dist/Code Light.app"
 ```
 
+To install the app and register it with Finder's Open With list:
+
+```sh
+scripts/install-app.sh
+```
+
 ## Design Goals
 
 - Native AppKit UI for low startup overhead.

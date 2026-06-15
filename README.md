@@ -99,6 +99,8 @@ Code Light is designed to sit beside coding agents and heavy editors:
 - Humans can copy selected code as fenced Markdown with source metadata, ready to paste into an agent.
 - Workspace context copy gives an agent the project root and a compact file list without indexing or background services.
 
+See `SKILL.md` for the minimal instructions a coding agent should follow when using Code Light.
+
 ## Repository
 
 GitHub: <https://github.com/francescocirulli/ide-light>
